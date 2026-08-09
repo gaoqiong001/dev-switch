@@ -6,14 +6,16 @@ on:
       - 'v*'
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.ref_name }}
   cancel-in-progress: false
 
 permissions:
   contents: write
 
 jobs:
-  release:
+  # ── 阶段 1：构建 + 收集资产 ──────────────────────────────────
+  build:
+    name: Build (Windows x64)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,22 +37,131 @@ jobs:
       - name: Install frontend deps
         run: npm ci
 
-      # tauri-action@v0 对应 Tauri v1。tauri build 时注入签名私钥，
-      # bundler 自动生成 .sig 与 latest.json，随 bundle/ 全部产物上传到 Release。
-      - name: Build app and publish release
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # 两个命名体系都设：TAURI_SIGNING_PRIVATE_KEY 给 tauri-action/bundler，
-          # TAURI_PRIVATE_KEY 给 tauri signer CLI（同值）
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      # 参考 cc-switch：手动处理密钥格式（支持两行原文 / base64 包裹 / 单行 base64），
+      # 写入 GITHUB_ENV 供 tauri build 读取。
+      - name: Prepare signing key
+        shell: bash
+        run: |
+          RAW="${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}"
+          if [ -z "$RAW" ]; then
+            echo "❌ TAURI_SIGNING_PRIVATE_KEY is empty" >&2
+            exit 1
+          fi
+
+          KEY_PATH="$RUNNER_TEMP/tauri_signing.key"
+
+          # 情况 1：原始两行文本（以 "untrusted comment:" 开头）
+          if echo "$RAW" | head -n1 | grep -q '^untrusted comment:'; then
+            printf '%s\n' "$RAW" > "$KEY_PATH"
+            echo "✅ Raw two-line key"
+          # 情况 2：base64 包裹（解码后是两行）
+          elif DECODED=$(printf '%s' "$RAW" | (base64 --decode 2>/dev/null || base64 -D 2>/dev/null)) \
+               && echo "$DECODED" | head -n1 | grep -q '^untrusted comment:'; then
+            printf '%s\n' "$DECODED" > "$KEY_PATH"
+            echo "✅ Base64-wrapped key decoded"
+          # 情况 3：单行纯 base64 → 构造两行文件
+          elif echo "$RAW" | grep -Eq '^[A-Za-z0-9+/=]+$'; then
+            ONE=$(printf '%s' "$RAW" | tr -d '\r\n')
+            printf '%s\n%s\n' "untrusted comment: tauri signing key" "$ONE" > "$KEY_PATH"
+            echo "✅ Single-line base64 key wrapped"
+          else
+            echo "❌ Unrecognized key format" >&2
+            exit 1
+          fi
+
+          # base64 编码后注入 GITHUB_ENV（多行安全）
+          if command -v base64 >/dev/null 2>&1; then
+            KEY_B64=$(base64 < "$KEY_PATH" | tr -d '\r\n')
+          else
+            KEY_B64=$(node -e "process.stdout.write(require('fs').readFileSync('$KEY_PATH').toString('base64'))")
+          fi
+          echo "TAURI_SIGNING_PRIVATE_KEY=$KEY_B64" >> "$GITHUB_ENV"
+          if [ -n "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" ]; then
+            echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" >> "$GITHUB_ENV"
+          fi
+          echo "✅ Signing key prepared"
+
+      # 参考 cc-switch：直接调 tauri CLI 构建（不用 tauri-action），
+      # 然后手动收集 .msi + .sig 到 release-assets/ 目录。
+      - name: Build Tauri app
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          npm run tauri build -- --bundles msi
+
+          # 收集资产
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          $VERSION = "${{ github.ref_name }}"
+          $targetRoot = 'src-tauri/target/release'
+
+          # .msi 安装包
+          $msi = Get-ChildItem -Path "$targetRoot/bundle/msi" -Recurse -Include *.msi -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($null -eq $msi) {
+            $msi = Get-ChildItem -Path "$targetRoot/bundle" -Recurse -Include *.msi -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
+          if ($null -ne $msi) {
+            $dest = "Dev.Switch_${VERSION}_x64.msi"
+            Copy-Item $msi.FullName (Join-Path "release-assets" $dest)
+            Write-Host "✅ MSI copied: $dest"
+
+            # .sig 签名文件（updater 必需）
+            $sigPath = "$($msi.FullName).sig"
+            if (Test-Path $sigPath) {
+              Copy-Item $sigPath (Join-Path "release-assets" "$dest.sig")
+              Write-Host "✅ Signature copied: $dest.sig"
+            } else {
+              Write-Warning "⚠️ No .sig found for MSI — updater will not work"
+            }
+          } else {
+            throw "❌ No MSI installer found"
+          }
+
+          # .exe 安装包
+          $nsis = Get-ChildItem -Path "$targetRoot/bundle/nsis" -Recurse -Include *.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($null -ne $nsis) {
+            $dest = "Dev.Switch_${VERSION}_x64-setup.exe"
+            Copy-Item $nsis.FullName (Join-Path "release-assets" $dest)
+            Write-Host "✅ NSIS copied: $dest"
+          }
+
+          # 列出所有资产
+          Write-Host "`nrelease-assets:"
+          Get-ChildItem -Path "release-assets" -Recurse | ForEach-Object {
+            Write-Host "  $($_.Name)  ($($_.Length) bytes)"
+          }
+
+      - name: Upload release assets
+        uses: actions/upload-artifact@v4
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'Dev Switch ${{ github.ref_name }}'
-          releaseBody: |
+          name: release-assets
+          path: release-assets/*
+          if-no-files-found: error
+
+  # ── 阶段 2：创建 GitHub Release + 上传安装包 ─────────────────
+  publish-release:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: write
+    steps:
+      - name: Download built assets
+        uses: actions/download-artifact@v4
+        with:
+          name: release-assets
+          path: release-assets
+
+      - name: List assets
+        run: ls -la release-assets
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Dev Switch ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          body: |
             # Dev Switch ${{ github.ref_name }}
 
             > 一键检测本地开发环境：19 种编程语言、50+ 种开发工具、系统与网络信息，附带各系统的安装/卸载指引，结果缓存在 SQLite 中，后续启动即时返回。
@@ -64,9 +175,87 @@ jobs:
             **中文**: [docs/release-notes/${{ github.ref_name }}-zh.md](docs/release-notes/${{ github.ref_name }}-zh.md)
 
             **Changelog**: [CHANGELOG.md](CHANGELOG.md)
-          releaseDraft: false
-          prerelease: false
-          # 上传 latest.json + .sig 到 Release Assets，供应用内 updater 使用
-          includeUpdaterJson: true
-          # nsis + msi；v1 updater 在 Windows 认 .msi.zip，latest.json 的 windows-x86_64 默认指向它
-          args: --bundles nsis,msi
+          files: release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── 阶段 3：生成 latest.json + 上传到 Release ────────────────
+  # 参考 cc-switch 的 assemble-latest-json job。
+  # Tauri updater 读取此文件来判断是否有新版本、下载地址和签名。
+  assemble-latest-json:
+    name: Assemble latest.json
+    runs-on: ubuntu-latest
+    needs: publish-release
+    permissions:
+      contents: write
+    steps:
+      - name: Install gh CLI
+        run: |
+          if ! command -v gh >/dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y gh
+          fi
+
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          mkdir -p dl
+          gh release download "$TAG" --dir dl --repo "$GITHUB_REPOSITORY"
+          ls -la dl
+
+      - name: Generate latest.json
+        env:
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          VERSION="${TAG#v}"
+          PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          BASE_URL="https://github.com/$REPO/releases/download/$TAG"
+
+          # 遍历 .sig 文件，构建 platform 映射
+          WIN_URL=""; WIN_SIG=""
+          shopt -s nullglob
+          for sig in dl/*.sig; do
+            fname=$(basename "${sig%.sig}")
+            url="$BASE_URL/$fname"
+            sig_content=$(cat "$sig")
+            case "$fname" in
+              *.msi)
+                WIN_URL="$url"; WIN_SIG="$sig_content";;
+            esac
+          done
+
+          # 构造 latest.json
+          cat > latest.json <<EOF
+          {
+            "version": "$VERSION",
+            "notes": "Dev Switch $TAG",
+            "pub_date": "$PUB_DATE",
+            "platforms": {
+              "windows-x86_64": {
+                "signature": "$WIN_SIG",
+                "url": "$WIN_URL"
+              }
+            }
+          }
+          EOF
+
+          # 清理 JSON 中的缩进（去掉每行前导空格）
+          node -e "
+            const fs = require('fs');
+            const raw = fs.readFileSync('latest.json','utf8');
+            const cleaned = raw.split('\n').map(l => l.replace(/^          /,'')).join('\n');
+            fs.writeFileSync('latest.json', cleaned);
+          "
+
+          echo "Generated latest.json:"
+          cat latest.json
+
+      - name: Upload latest.json to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.ref_name }}" latest.json --clobber --repo "$GITHUB_REPOSITORY"
+          echo "✅ latest.json uploaded"
