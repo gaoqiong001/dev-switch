@@ -115,6 +115,8 @@
     "startup": "Startup",
     "autoCheckUpdate": "Check for updates on startup",
     "autoCheckUpdateDesc": "Automatically check for new versions when the app starts",
+    "autoInstallUpdate": "Auto-download and install updates",
+    "autoInstallUpdateDesc": "Silently download and install updates when available (turning off opens the download page instead)",
     "autoRefreshOnStart": "Refresh detection on startup",
     "autoRefreshOnStartDesc": "Re-scan your environment when the app starts",
     "detectScope": "Detection Scope",
@@ -173,6 +175,10 @@
   },
   "update": {
     "available": "New version available: {{version}}",
-    "checkFailed": "Failed to check for updates"
+    "checkFailed": "Failed to check for updates",
+    "downloading": "Downloading update...",
+    "downloadProgress": "Downloading update... {{percent}}%",
+    "restartHint": "Update installed. Please reopen Dev Switch.",
+    "installFailed": "Automatic update failed. Please download manually."
   }
 }

@@ -7,6 +7,7 @@ export const SETTINGS_KEY = 'dev-switch-settings';
 
 export const defaultSettings: Settings = {
   autoCheckUpdate: true,
+  autoInstallUpdate: true,
   autoRefreshOnStart: false,
   theme: 'system',
   language: 'zh-CN',
@@ -25,6 +26,7 @@ const LANGS: Settings['language'][] = ['zh-CN', 'en-US'];
 const FORMATS: Settings['exportFormat'][] = ['json', 'csv'];
 const BOOL_KEYS = [
   'autoCheckUpdate',
+  'autoInstallUpdate',
   'autoRefreshOnStart',
   'compactMode',
   'detectLanguages',

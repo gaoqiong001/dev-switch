@@ -17,6 +17,17 @@
         "open": true
       }
     },
+    "updater": {
+      "active": true,
+      "dialog": false,
+      "endpoints": [
+        "https://github.com/gaoqiong001/dev-switch/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJGQkI3NTY2REY4NkNBMzQKUldRMHlvYmZablc3dncwOER5Q0JtUytwTDE3T21TSTdBbTR1WWwvRlhPOVZ1aFhHK0FUdEVuaTYK",
+      "windows": {
+        "installMode": "passive"
+      }
+    },
     "bundle": {
       "active": true,
       "category": "DeveloperTool",

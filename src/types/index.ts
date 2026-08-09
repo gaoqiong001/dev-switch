@@ -44,6 +44,8 @@ export type Theme = 'light' | 'dark' | 'system';
 
 export interface Settings {
   autoCheckUpdate: boolean;
+  /** 发现新版本时静默下载并自动安装（默认 true）；false 时回退到「打开下载页手动下载」 */
+  autoInstallUpdate: boolean;
   autoRefreshOnStart: boolean;
   theme: Theme;
   language: 'zh-CN' | 'en-US';

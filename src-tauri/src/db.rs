@@ -1,4 +1,4 @@
-use rusqlite::{Connection, Result, params};
+use rusqlite::{params, Connection, Result};
 use std::sync::Mutex;
 
 use crate::{LanguageInfo, ToolInfo};
@@ -78,8 +78,8 @@ impl Database {
             let install_guide_json: Option<String> = row.get(4)?;
             let uninstall_guide: Option<String> = row.get(5)?;
 
-            let install_guide = install_guide_json
-                .and_then(|json| serde_json::from_str(&json).ok());
+            let install_guide =
+                install_guide_json.and_then(|json| serde_json::from_str(&json).ok());
 
             Ok(LanguageInfo {
                 name,
@@ -96,7 +96,9 @@ impl Database {
 
     pub fn upsert_language(&self, lang: &LanguageInfo) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        let install_guide_json = lang.install_guide.as_ref()
+        let install_guide_json = lang
+            .install_guide
+            .as_ref()
             .and_then(|g| serde_json::to_string(g).ok());
 
         conn.execute(
@@ -137,8 +139,8 @@ impl Database {
             let install_guide_json: Option<String> = row.get(4)?;
             let uninstall_guide: Option<String> = row.get(5)?;
 
-            let install_guide = install_guide_json
-                .and_then(|json| serde_json::from_str(&json).ok());
+            let install_guide =
+                install_guide_json.and_then(|json| serde_json::from_str(&json).ok());
 
             Ok(ToolInfo {
                 name,
@@ -155,7 +157,9 @@ impl Database {
 
     pub fn upsert_tool(&self, tool: &ToolInfo) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        let install_guide_json = tool.install_guide.as_ref()
+        let install_guide_json = tool
+            .install_guide
+            .as_ref()
             .and_then(|g| serde_json::to_string(g).ok());
 
         conn.execute(
@@ -207,7 +211,8 @@ impl Database {
                     "SELECT COUNT(*) FROM {} WHERE (strftime('%s','now') - strftime('%s', updated_at)) > ?1",
                     table
                 );
-                let stale: i64 = conn.query_row(&stale_sql, params![hours as i64], |row| row.get(0))?;
+                let stale: i64 =
+                    conn.query_row(&stale_sql, params![hours as i64], |row| row.get(0))?;
                 Ok(stale == 0)
             }
         }

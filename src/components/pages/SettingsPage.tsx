@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/tauri';
 import { toast } from 'sonner';
 import { Settings, AppState, LanguageInfo, ToolInfo } from '../../types';
 import { validate } from '../../hooks/useSettings';
-import { checkUpdates } from '../../hooks/useUpdateCheck';
+import { checkUpdates, installUpdate, onDownloadProgress } from '../../hooks/useUpdateCheck';
 import { formatBytes } from '../../utils/format';
 import { openUrl } from '../../utils/tauri';
 import GlassCard from '../Cards/GlassCard';
@@ -93,12 +93,43 @@ export default function SettingsPage({
     setIsCheckingUpdate(false);
     if (result.status === 'available') {
       setUpdateInfo({ available: true, version: result.info.version, download_url: result.info.download_url, notes: result.info.notes });
-      setUpdateStatus({ text: t('settings.updateAvailable'), color: '#3b82f6' });
+      if (settings.autoInstallUpdate) {
+        await startAutoInstall();
+      } else {
+        // 关闭开关的回退路径：显示横幅 + 「安装更新」按钮（打开下载页手动安装）
+        setUpdateStatus({ text: t('settings.updateAvailable'), color: '#3b82f6' });
+      }
     } else if (result.status === 'up-to-date') {
       setUpdateInfo(null);
       setUpdateStatus({ text: t('settings.upToDate'), color: '#22c55e' });
     } else {
       setUpdateStatus({ text: t('settings.updateFailed'), color: '#ef4444' });
+    }
+  };
+
+  /** 静默下载并自动安装更新；进度通过 tauri://update-download-progress 事件驱动横幅文案 */
+  const startAutoInstall = async () => {
+    setUpdateStatus({ text: t('update.downloading'), color: '#3b82f6' });
+    let downloaded = 0;
+    let unlisten: (() => void) | null = null;
+    try {
+      unlisten = await onDownloadProgress(({ chunkLength, contentLength }) => {
+        downloaded += chunkLength;
+        const percent =
+          contentLength != null ? Math.min(99, Math.round((downloaded / contentLength) * 100)) : null;
+        setUpdateStatus({
+          text: percent != null ? t('update.downloadProgress', { percent }) : t('update.downloading'),
+          color: '#3b82f6',
+        });
+      });
+      await installUpdate();
+      unlisten?.();
+      // Windows 上通常走不到这里（进程已被 msiexec 接管）；能走到说明已装完（macOS/Linux）
+      setUpdateStatus({ text: t('update.restartHint'), color: '#22c55e' });
+    } catch (error) {
+      unlisten?.();
+      console.error('自动更新失败:', error);
+      setUpdateStatus({ text: t('update.installFailed'), color: '#ef4444' });
     }
   };
 
@@ -312,6 +343,7 @@ export default function SettingsPage({
           <GlassCard icon="⚙️" title={t('settings.startup')}>
             <div className="space-y-4">
               <ToggleSetting label={t('settings.autoCheckUpdate')} description={t('settings.autoCheckUpdateDesc')} checked={settings.autoCheckUpdate} onChange={(c) => onUpdateSetting('autoCheckUpdate', c)} />
+              <ToggleSetting label={t('settings.autoInstallUpdate')} description={t('settings.autoInstallUpdateDesc')} checked={settings.autoInstallUpdate} onChange={(c) => onUpdateSetting('autoInstallUpdate', c)} />
               <ToggleSetting label={t('settings.autoRefreshOnStart')} description={t('settings.autoRefreshOnStartDesc')} checked={settings.autoRefreshOnStart} onChange={(c) => onUpdateSetting('autoRefreshOnStart', c)} />
             </div>
           </GlassCard>

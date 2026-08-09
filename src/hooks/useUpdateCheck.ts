@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/tauri';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
 export type UpdateCheckResult =
   | { status: 'available'; info: { version: string; download_url: string; notes?: string } }
@@ -12,6 +13,29 @@ interface RawUpdateResult {
   download_url?: string;
   notes?: string;
   message?: string;
+}
+
+/** tauri://update-download-progress 事件负载；chunkLength 为单次回调的增量，非累计 */
+export interface UpdateDownloadProgress {
+  chunkLength: number;
+  contentLength: number | null;
+}
+
+/**
+ * 订阅下载进度事件，返回退订函数。
+ * chunkLength 是每次回调的增量，前端需自行累加计算百分比。
+ */
+export function onDownloadProgress(
+  handler: (p: UpdateDownloadProgress) => void
+): Promise<UnlistenFn> {
+  return listen<UpdateDownloadProgress>('tauri://update-download-progress', (e) =>
+    handler(e.payload)
+  );
+}
+
+/** 触发静默下载并安装（Windows 上安装时会接管并关闭当前应用进程） */
+export async function installUpdate(): Promise<void> {
+  await invoke('install_update_and_restart');
 }
 
 /**

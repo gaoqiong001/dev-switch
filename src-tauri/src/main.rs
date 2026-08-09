@@ -3,8 +3,9 @@
 mod db;
 
 use serde::{Deserialize, Serialize};
-use sysinfo::System;
+use std::cmp::Ordering;
 use std::process::Command;
+use sysinfo::System;
 use tauri::State;
 
 use db::Database;
@@ -70,7 +71,10 @@ fn create_command(program: &str) -> Command {
 }
 
 // 检测工具/语言是否安装并获取版本
-fn detect_version(executables: &[&str], version_args: &[&str]) -> (bool, Option<String>, Option<String>) {
+fn detect_version(
+    executables: &[&str],
+    version_args: &[&str],
+) -> (bool, Option<String>, Option<String>) {
     let mut installed = false;
     let mut version = None;
     let mut path = None;
@@ -85,7 +89,9 @@ fn detect_version(executables: &[&str], version_args: &[&str]) -> (bool, Option<
                 if !output_str.is_empty() {
                     version = Some(clean_version(&output_str));
                 }
-                path = which::which(exe).ok().map(|p| p.to_string_lossy().to_string());
+                path = which::which(exe)
+                    .ok()
+                    .map(|p| p.to_string_lossy().to_string());
                 break;
             }
         }
@@ -95,7 +101,7 @@ fn detect_version(executables: &[&str], version_args: &[&str]) -> (bool, Option<
     if !installed {
         let mut fallback_path = None;
         for exe in executables {
-            if let Some(p) = which::which(exe).ok() {
+            if let Ok(p) = which::which(exe) {
                 let p_str = p.to_string_lossy().to_string();
                 fallback_path = Some(p_str.clone());
                 // 尝试再次执行命令，这次使用完整路径；失败则继续尝试下一个候选可执行文件
@@ -125,7 +131,11 @@ fn detect_version(executables: &[&str], version_args: &[&str]) -> (bool, Option<
 fn output_to_string(output: &std::process::Output) -> String {
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    if !stdout.is_empty() { stdout } else { stderr }
+    if !stdout.is_empty() {
+        stdout
+    } else {
+        stderr
+    }
 }
 
 /// 取第一个非空行（去掉首尾空白）
@@ -145,12 +155,19 @@ fn extract_version(s: &str) -> Option<String> {
             let mut segs = 0;
             let mut k = j;
             loop {
-                while k < b.len() && b[k].is_ascii_digit() { k += 1; }
+                while k < b.len() && b[k].is_ascii_digit() {
+                    k += 1;
+                }
                 segs += 1;
-                if k < b.len() && b[k] == b'.' && segs < 4 { k += 1; continue; }
+                if k < b.len() && b[k] == b'.' && segs < 4 {
+                    k += 1;
+                    continue;
+                }
                 break;
             }
-            if segs >= 2 { return Some(s[j..k].to_string()); }
+            if segs >= 2 {
+                return Some(s[j..k].to_string());
+            }
         }
         i += 1;
     }
@@ -166,6 +183,29 @@ fn clean_version(raw: &str) -> String {
     }
 }
 
+/// 语义化版本比较（无外部依赖，沿用现有手动实现风格）。
+/// 按 `.` 分段，逐段解析为 u32；缺失段补 0；忽略前导 `v`。非数字段按 0 处理。
+fn compare_versions(a: &str, b: &str) -> Ordering {
+    let a_parts: Vec<&str> = a.trim_start_matches('v').split('.').collect();
+    let b_parts: Vec<&str> = b.trim_start_matches('v').split('.').collect();
+    let max_len = a_parts.len().max(b_parts.len());
+    for i in 0..max_len {
+        let av = a_parts
+            .get(i)
+            .and_then(|s| s.parse::<u32>().ok())
+            .unwrap_or(0);
+        let bv = b_parts
+            .get(i)
+            .and_then(|s| s.parse::<u32>().ok())
+            .unwrap_or(0);
+        let ord = av.cmp(&bv);
+        if ord != Ordering::Equal {
+            return ord;
+        }
+    }
+    Ordering::Equal
+}
+
 #[cfg(test)]
 mod version_tests {
     use super::*;
@@ -173,7 +213,10 @@ mod version_tests {
     #[test]
     fn extract_version_multiline_noise() {
         // VS Code: 多行输出（版本 / git hash / arch）
-        assert_eq!(clean_version("1.132.0\ndf53daabb18cd157bdb08c7f01c34df936cf12f4\nx64"), "1.132.0");
+        assert_eq!(
+            clean_version("1.132.0\ndf53daabb18cd157bdb08c7f01c34df936cf12f4\nx64"),
+            "1.132.0"
+        );
         // curl: 整段 banner
         assert_eq!(
             clean_version("curl 8.21.0 (Windows) libcurl/8.21.0 Schannel zlib/1.3.2\nProtocols: dict file ftp...\nFeatures: alt-svc..."),
@@ -185,9 +228,15 @@ mod version_tests {
     fn extract_version_single_line() {
         assert_eq!(clean_version("git version 2.45.1"), "2.45.1");
         assert_eq!(clean_version("go version go1.22.0 windows/amd64"), "1.22.0");
-        assert_eq!(clean_version("Docker version 27.0.3, build 3713ee1"), "27.0.3");
+        assert_eq!(
+            clean_version("Docker version 27.0.3, build 3713ee1"),
+            "27.0.3"
+        );
         assert_eq!(clean_version("v22.12.0"), "22.12.0");
-        assert_eq!(clean_version("openjdk version \"17.0.9\" 2023-10-17"), "17.0.9");
+        assert_eq!(
+            clean_version("openjdk version \"17.0.9\" 2023-10-17"),
+            "17.0.9"
+        );
     }
 
     #[test]
@@ -196,6 +245,23 @@ mod version_tests {
         assert_eq!(clean_version("SomeTool"), "SomeTool");
         // 纯数字无点号 → 回退
         assert_eq!(clean_version("Build 5 (2024)"), "Build 5 (2024)");
+    }
+
+    #[test]
+    fn compare_versions_ordering() {
+        assert_eq!(compare_versions("1.0.0", "1.0.0"), Ordering::Equal);
+        assert_eq!(compare_versions("1.0.1", "1.0.0"), Ordering::Greater);
+        assert_eq!(compare_versions("1.0.0", "1.0.1"), Ordering::Less);
+        assert_eq!(compare_versions("1.2.0", "1.10.0"), Ordering::Less);
+        assert_eq!(compare_versions("2.0.0", "1.99.99"), Ordering::Greater);
+    }
+
+    #[test]
+    fn compare_versions_missing_or_extra_segments() {
+        assert_eq!(compare_versions("1.2", "1.2.0"), Ordering::Equal);
+        assert_eq!(compare_versions("1.2", "1.2.1"), Ordering::Less);
+        assert_eq!(compare_versions("1.2.3.4", "1.2.3"), Ordering::Greater);
+        assert_eq!(compare_versions("v1.2.3", "1.2.3"), Ordering::Equal);
     }
 }
 
@@ -215,7 +281,10 @@ fn get_system_info() -> SystemInfo {
 }
 
 #[tauri::command]
-fn get_language_info(db: State<'_, Database>, cache_expiry_hours: Option<u64>) -> Result<Vec<LanguageInfo>, String> {
+fn get_language_info(
+    db: State<'_, Database>,
+    cache_expiry_hours: Option<u64>,
+) -> Result<Vec<LanguageInfo>, String> {
     // 缓存有效则直接返回（cache_expiry_hours 为 None 表示永不过期）
     if let Ok(true) = db.is_languages_cache_valid(cache_expiry_hours) {
         if let Ok(languages) = db.get_languages() {
@@ -418,12 +487,15 @@ fn get_language_info(db: State<'_, Database>, cache_expiry_hours: Option<u64>) -
         languages.push(lang);
     }
 
-    languages.sort_by(|a, b| b.installed.cmp(&a.installed));
+    languages.sort_by_key(|a| std::cmp::Reverse(a.installed));
     Ok(languages)
 }
 
 #[tauri::command]
-fn get_tool_info(db: State<'_, Database>, cache_expiry_hours: Option<u64>) -> Result<Vec<ToolInfo>, String> {
+fn get_tool_info(
+    db: State<'_, Database>,
+    cache_expiry_hours: Option<u64>,
+) -> Result<Vec<ToolInfo>, String> {
     // 缓存有效则直接返回（cache_expiry_hours 为 None 表示永不过期）
     if let Ok(true) = db.is_tools_cache_valid(cache_expiry_hours) {
         if let Ok(tools) = db.get_tools() {
@@ -816,7 +888,7 @@ fn get_tool_info(db: State<'_, Database>, cache_expiry_hours: Option<u64>) -> Re
         tools.push(tool);
     }
 
-    tools.sort_by(|a, b| b.installed.cmp(&a.installed));
+    tools.sort_by_key(|a| std::cmp::Reverse(a.installed));
     Ok(tools)
 }
 
@@ -829,8 +901,19 @@ fn get_network_info() -> NetworkInfo {
     {
         // 虚拟网卡 / 非物理接口关键字（其 IP 不作为本机地址展示）
         const VIRTUAL_KEYWORDS: &[&str] = &[
-            "VirtualBox", "VMware", "vEthernet", "Docker", "WSL", "Hyper-V",
-            "Hamachi", "TAP", "TUN", "Loopback", "Bluetooth", "Tailscale", "ZeroTier",
+            "VirtualBox",
+            "VMware",
+            "vEthernet",
+            "Docker",
+            "WSL",
+            "Hyper-V",
+            "Hamachi",
+            "TAP",
+            "TUN",
+            "Loopback",
+            "Bluetooth",
+            "Tailscale",
+            "ZeroTier",
         ];
 
         if let Ok(output) = create_command("ipconfig").output() {
@@ -838,14 +921,18 @@ fn get_network_info() -> NetworkInfo {
             let mut current_adapter: Option<String> = None;
             for line in output_str.lines() {
                 let is_adapter_line = line.contains("适配器") || line.contains("Adapter");
-                let is_virtual = current_adapter.as_ref().map_or(false, |name| {
-                    VIRTUAL_KEYWORDS.iter().any(|k| name.contains(k))
-                });
+                let is_virtual = current_adapter
+                    .as_ref()
+                    .is_some_and(|name| VIRTUAL_KEYWORDS.iter().any(|k| name.contains(k)));
                 if is_adapter_line {
-                    current_adapter = line.split(':').next().map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
-                    let is_virtual = current_adapter.as_ref().map_or(false, |name| {
-                        VIRTUAL_KEYWORDS.iter().any(|k| name.contains(k))
-                    });
+                    current_adapter = line
+                        .split(':')
+                        .next()
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty());
+                    let is_virtual = current_adapter
+                        .as_ref()
+                        .is_some_and(|name| VIRTUAL_KEYWORDS.iter().any(|k| name.contains(k)));
                     if !is_virtual {
                         if let Some(name) = &current_adapter {
                             interfaces.push(name.clone());
@@ -856,10 +943,12 @@ fn get_network_info() -> NetworkInfo {
                     if let Some(ip) = line.split(':').nth(1) {
                         let ip = ip.trim().to_string();
                         // 取第一个非虚拟、非环回、非链路本地（169.254.*）的 IPv4
-                        if !ip.is_empty() && !ip.starts_with("127.") && !ip.starts_with("169.254.") {
-                            if local_ip.is_none() {
-                                local_ip = Some(ip);
-                            }
+                        if local_ip.is_none()
+                            && !ip.is_empty()
+                            && !ip.starts_with("127.")
+                            && !ip.starts_with("169.254.")
+                        {
+                            local_ip = Some(ip);
                         }
                     }
                 }
@@ -936,9 +1025,43 @@ fn get_db_size() -> Result<u64, String> {
         .map_err(|e| e.to_string())
 }
 
+/// 检查更新：优先走内置 updater（读取签名 latest.json），失败时兜底到 GitHub Releases API。
+/// 返回结构保持 `{available, version, current_version, download_url, notes, message?}` 不变。
 #[tauri::command]
-async fn check_for_updates() -> Result<serde_json::Value, String> {
-    // 检查 GitHub releases
+async fn check_for_updates(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    // skip_events()：避免 updater 自动发 tauri://update-available 事件并注册安装监听
+    match tauri::updater::builder(app.clone())
+        .skip_events()
+        .check()
+        .await
+    {
+        Ok(response) => {
+            let available = response.is_update_available();
+            let version = response.latest_version().to_string();
+            let current = response.current_version().to_string();
+            Ok(serde_json::json!({
+                "available": available,
+                "version": version,
+                "current_version": current,
+                "download_url": format!(
+                    "https://github.com/gaoqiong001/dev-switch/releases/tag/v{}",
+                    version
+                ),
+                "notes": response.body().cloned().unwrap_or_default(),
+            }))
+        }
+        // 服务端 204 表示已是最新
+        Err(tauri::updater::Error::UpToDate) => Ok(serde_json::json!({
+            "available": false,
+            "current_version": env!("CARGO_PKG_VERSION"),
+        })),
+        // 其余错误（如首版尚无 latest.json / 端点 404）→ 兜底 GitHub API
+        Err(_) => check_for_updates_github().await,
+    }
+}
+
+/// 兜底方案：直接查询 GitHub Releases API（原逻辑 + 语义化版本比较）。
+async fn check_for_updates_github() -> Result<serde_json::Value, String> {
     let client = reqwest::Client::new();
     let response = client
         .get("https://api.github.com/repos/gaoqiong001/dev-switch/releases/latest")
@@ -954,10 +1077,7 @@ async fn check_for_updates() -> Result<serde_json::Value, String> {
         }));
     }
 
-    let release: serde_json::Value = response
-        .json()
-        .await
-        .map_err(|e| e.to_string())?;
+    let release: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
 
     let latest_version = release["tag_name"]
         .as_str()
@@ -972,18 +1092,37 @@ async fn check_for_updates() -> Result<serde_json::Value, String> {
         .unwrap_or("https://github.com/gaoqiong001/dev-switch/releases")
         .to_string();
 
-    let notes = release["body"]
-        .as_str()
-        .unwrap_or("")
-        .to_string();
+    let notes = release["body"].as_str().unwrap_or("").to_string();
 
     Ok(serde_json::json!({
-        "available": latest_version != current_version,
+        "available": compare_versions(&latest_version, current_version) == Ordering::Greater,
         "version": latest_version,
         "current_version": current_version,
         "download_url": download_url,
         "notes": notes
     }))
+}
+
+/// 静默下载并安装更新（发现新版 → 自动安装）。
+/// Windows 上安装期间 msiexec 会接管并关闭当前进程，因此这行 await 通常不会返回；
+/// macOS/Linux 安装完成后继续执行到 restart()。
+#[tauri::command]
+async fn install_update_and_restart(app: tauri::AppHandle) -> Result<(), String> {
+    let response = tauri::updater::builder(app.clone())
+        .skip_events()
+        .check()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !response.is_update_available() {
+        return Err("没有可安装的更新".to_string());
+    }
+    // download_and_install 内部会发 tauri://update-status 与 tauri://update-download-progress 事件
+    response
+        .download_and_install()
+        .await
+        .map_err(|e| e.to_string())?;
+    app.restart();
+    Ok(())
 }
 
 #[tauri::command]
@@ -1018,6 +1157,7 @@ fn main() {
             get_db_path,
             get_db_size,
             check_for_updates,
+            install_update_and_restart,
             open_url
         ])
         .run(tauri::generate_context!())

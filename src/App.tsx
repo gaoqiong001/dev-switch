@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { useAppState } from './hooks/useAppState';
 import { useSettings } from './hooks/useSettings';
 import { useSystemThemeListener } from './utils/theme';
-import { checkUpdates } from './hooks/useUpdateCheck';
+import { checkUpdates, installUpdate } from './hooks/useUpdateCheck';
 import Header from './components/Layout/Header';
 import SearchBar from './components/ui/SearchBar';
 import Toaster from './components/ui/Toaster';
@@ -30,16 +30,29 @@ export default function App() {
   // system 主题跟随系统实时切换
   useSystemThemeListener(settings.theme);
 
-  // 检查更新：启动与「启动时检查更新」开关即时触发共用
-  const runUpdateCheck = useCallback(async () => {
-    const result = await checkUpdates();
-    if (result.status === 'available') {
-      setHasUpdate(true);
-      toast.success(t('update.available', { version: result.info.version }));
-    } else if (result.status === 'error') {
-      toast.error(t('update.checkFailed'));
-    }
-  }, [t]);
+  // 检查更新：启动与「启动时检查更新」开关即时触发共用。
+  // autoInstall=true（自动下载并安装更新开关开启）时发现新版直接静默安装。
+  const runUpdateCheck = useCallback(
+    async (autoInstall: boolean) => {
+      const result = await checkUpdates();
+      if (result.status === 'available') {
+        setHasUpdate(true);
+        if (autoInstall) {
+          toast.info(t('update.downloading'));
+          try {
+            await installUpdate();
+          } catch (error) {
+            toast.error(t('update.installFailed'));
+          }
+        } else {
+          toast.success(t('update.available', { version: result.info.version }));
+        }
+      } else if (result.status === 'error') {
+        toast.error(t('update.checkFailed'));
+      }
+    },
+    [t]
+  );
 
   // 启动加载 + 启动更新检查（bootRef 防 React 19 StrictMode 双跑）
   useEffect(() => {
@@ -51,7 +64,7 @@ export default function App() {
       loadAllInfo(settings);
     }
     if (settings.autoCheckUpdate) {
-      runUpdateCheck();
+      runUpdateCheck(settings.autoInstallUpdate);
     }
     // 仅在挂载时执行一次，使用初始 settings
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -64,7 +77,7 @@ export default function App() {
       if ((DETECT_KEYS as readonly (keyof Settings)[]).includes(key)) {
         loadAllInfo({ ...settings, [key]: value });
       } else if (key === 'autoCheckUpdate' && value === true) {
-        runUpdateCheck();
+        runUpdateCheck({ ...settings, [key]: value }.autoInstallUpdate);
       } else if (key === 'autoRefreshOnStart' && value === true) {
         refreshDetection(settings);
       }

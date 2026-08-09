@@ -1,0 +1,60 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri
+
+      - name: Install frontend deps
+        run: npm ci
+
+      # tauri-action@v0 对应 Tauri v1。tauri build 时注入签名私钥，
+      # bundler 自动生成 .sig 与 latest.json，随 bundle/ 全部产物上传到 Release。
+      - name: Build app and publish release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 两个命名体系都设：TAURI_SIGNING_PRIVATE_KEY 给 tauri-action/bundler，
+          # TAURI_PRIVATE_KEY 给 tauri signer CLI（同值）
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Dev Switch ${{ github.ref_name }}'
+          releaseBody: |
+            Auto-generated release for ${{ github.ref_name }}.
+
+            See the assets below to download and install.
+          releaseDraft: false
+          prerelease: false
+          # nsis + msi；v1 updater 在 Windows 认 .msi.zip，latest.json 的 windows-x86_64 默认指向它
+          args: --bundles nsis,msi

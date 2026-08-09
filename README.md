@@ -56,6 +56,8 @@ Setting up a new machine, auditing a runtime, or helping a colleague usually mea
 - **Export / Import** — export detection results as JSON or CSV; import settings back
 - **Update check** — checks the GitHub Releases API for new versions
 
+[Full Changelog](CHANGELOG.md) | [Release Notes](docs/release-notes/v0.1.0-en.md)
+
 ## Supported Languages
 
 Node.js, Python, Java, Go, Rust, .NET, Ruby, PHP, Perl, Swift, Kotlin, Scala, Elixir, Clojure, Haskell, Julia, Lua, R, MATLAB
