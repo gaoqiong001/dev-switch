@@ -233,4 +233,4 @@ cd src-tauri && cargo test
 
 ## 许可证
 
-MIT © javaitstu
+MIT © 高琼
