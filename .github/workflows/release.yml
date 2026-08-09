@@ -37,11 +37,12 @@ jobs:
       - name: Install frontend deps
         run: npm ci
 
-      # 参考 cc-switch：处理密钥格式，写入文件供 Tauri CLI 读取。
-      # Tauri CLI 支持两种方式：
-      #   1. TAURI_PRIVATE_KEY = 密钥文件路径
-      #   2. TAURI_PRIVATE_KEY = 完整两行密钥内容
-      # 这里采用方式 1（写文件路径），最可靠。
+      # 处理密钥格式，写入文件供 Tauri CLI 读取。
+      # Tauri CLI 的 TAURI_PRIVATE_KEY 支持：
+      #   1. 文件路径（绝对路径）
+      #   2. 密钥内容（两行文本）
+      # 这里写文件后，通过 TAURI_PRIVATE_KEY=文件路径 传递。
+      # 注意：密码必须在 GitHub Secrets 中设置 TAURI_SIGNING_PRIVATE_KEY_PASSWORD。
       - name: Prepare signing key
         shell: bash
         run: |
@@ -53,36 +54,30 @@ jobs:
 
           KEY_PATH="$RUNNER_TEMP/tauri_signing.key"
 
-          # 情况 1：已是两行格式（以 "untrusted comment:" 开头）
+          # 统一转为两行文件格式
           if echo "$RAW" | head -n1 | grep -q '^untrusted comment:'; then
             printf '%s\n' "$RAW" > "$KEY_PATH"
             echo "✅ Raw two-line key"
-          # 情况 2：base64 编码的两行文件（解码后以 "untrusted comment:" 开头）
           elif DECODED=$(printf '%s' "$RAW" | (base64 --decode 2>/dev/null || base64 -D 2>/dev/null)) \
                && echo "$DECODED" | head -n1 | grep -q '^untrusted comment:'; then
             printf '%s\n' "$DECODED" > "$KEY_PATH"
             echo "✅ Base64-wrapped key decoded"
-          # 情况 3：单行 base64（纯 Base64 字符串）→ 构造两行文件
           elif echo "$RAW" | grep -Eq '^[A-Za-z0-9+/=]+$'; then
             ONE=$(printf '%s' "$RAW" | tr -d '\r\n')
             printf '%s\n%s\n' "untrusted comment: tauri signing key" "$ONE" > "$KEY_PATH"
             echo "✅ Single-line base64 wrapped to two-line file"
           else
             echo "❌ Unrecognized key format" >&2
-            echo "Key starts with: $(echo "$RAW" | head -c 20)..." >&2
             exit 1
           fi
 
-          echo "Key file: $KEY_PATH"
-          head -1 "$KEY_PATH" | cut -c1-40
-          echo "..."
-          wc -l "$KEY_PATH"
+          echo "Key lines: $(wc -l < "$KEY_PATH")"
+          echo "First line: $(head -1 "$KEY_PATH" | cut -c1-40)..."
 
-          # 注入文件路径（Tauri CLI 读 TAURI_PRIVATE_KEY 环境变量）
+          # 注入文件路径 + 密码
+          # Tauri v1 读 TAURI_PRIVATE_KEY（文件路径或内容）+ TAURI_KEY_PASSWORD（密码）
           echo "TAURI_PRIVATE_KEY=$KEY_PATH" >> "$GITHUB_ENV"
-          if [ -n "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" ]; then
-            echo "TAURI_KEY_PASSWORD=${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" >> "$GITHUB_ENV"
-          fi
+          echo "TAURI_KEY_PASSWORD=${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" >> "$GITHUB_ENV"
           echo "✅ Signing key prepared at $KEY_PATH"
 
       # 参考 cc-switch：直接调 tauri CLI 构建（不用 tauri-action），
