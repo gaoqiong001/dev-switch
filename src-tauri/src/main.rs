@@ -1134,7 +1134,7 @@ fn open_url(url: String) -> Result<(), String> {
 fn set_window_theme(window: tauri::Window, theme: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        use windows::Win32::Foundation::{HWND, BOOL};
+        use windows::Win32::Foundation::{BOOL, HWND};
         use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_USE_IMMERSIVE_DARK_MODE};
 
         let hwnd = window.hwnd().map_err(|e| e.to_string())?;
