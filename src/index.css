@@ -1,0 +1,179 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #ffffff;
+  --fg: #0a0a0b;
+  --card: #ffffff;
+  --card-fg: #0a0a0b;
+  --muted: #f4f4f5;
+  --muted-fg: #71717a;
+  --accent: #f4f4f5;
+  --accent-fg: #0a0a0b;
+  --border: #e4e4e7;
+  --primary: #3b82f6;
+  --primary-dark: #2563eb;
+  --danger: #ef4444;
+  --danger-dark: #dc2626;
+  --success: #22c55e;
+  --success-dark: #16a34a;
+}
+
+.dark {
+  --bg: #18181b;
+  --fg: #fafafa;
+  --card: #27272a;
+  --card-fg: #fafafa;
+  --muted: #27272a;
+  --muted-fg: #a1a1aa;
+  --accent: #27272a;
+  --accent-fg: #fafafa;
+  --border: #3f3f46;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--fg);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+  line-height: 1.5;
+}
+
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--muted);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-fg);
+}
+
+/* 选中文本 */
+::selection {
+  background-color: rgba(59, 130, 246, 0.3);
+}
+
+/* 动画 */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.3s ease;
+}
+
+.animate-slide-in {
+  animation: slideIn 0.3s ease;
+}
+
+.animate-pulse {
+  animation: pulse 2s infinite;
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* 玻璃效果 */
+.glass {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.dark .glass {
+  background: rgba(39, 39, 42, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* 卡片悬停效果 */
+.card-hover {
+  transition: all 0.2s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.1), 0 4px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.dark .card-hover:hover {
+  box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.3), 0 4px 10px -5px rgba(0, 0, 0, 0.2);
+}
+
+/* 按钮点击效果 */
+.btn-press {
+  transition: all 0.1s ease;
+}
+
+.btn-press:active {
+  transform: scale(0.98);
+}
+
+/* 文字截断 */
+.truncate-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 代码字体 */
+.font-code {
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', monospace;
+}
+
+/* ===== 紧凑模式：收紧间距 ===== */
+.compact-mode .p-6 { padding: 0.875rem; }
+.compact-mode .sm\:p-8 { padding: 0.875rem; }
+.compact-mode .p-8 { padding: 0.875rem; }
+.compact-mode .p-4 { padding: 0.625rem; }
+.compact-mode .p-3 { padding: 0.5rem; }
+.compact-mode .mb-6 { margin-bottom: 0.75rem; }
+.compact-mode .space-y-6 > * + * { margin-top: 0.75rem; }
+.compact-mode .space-y-4 > * + * { margin-top: 0.5rem; }
+.compact-mode [class*="gap-5"] { gap: 0.75rem; }
+.compact-mode [class*="gap-4"] { gap: 0.5rem; }

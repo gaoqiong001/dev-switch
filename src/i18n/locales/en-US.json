@@ -1,0 +1,178 @@
+{
+  "app": {
+    "name": "Dev Switch",
+    "subtitle": "Environment Detector",
+    "title": "Dev Switch - Environment Detector"
+  },
+  "nav": {
+    "system": "System",
+    "languages": "Languages",
+    "tools": "Tools",
+    "settings": "Settings"
+  },
+  "pageTitle": {
+    "system": "System Info",
+    "languages": "Programming Languages",
+    "tools": "Dev Tools",
+    "settings": "Settings"
+  },
+  "pageDesc": {
+    "system": "Operating system, hardware and network info",
+    "languages": "Installed programming languages and versions",
+    "tools": "Development tools and editors",
+    "settings": "App configuration and data management"
+  },
+  "header": {
+    "refresh": "Refresh",
+    "detecting": "Detecting...",
+    "ready": "Ready",
+    "error": "Error",
+    "updateAvailable": "Update available"
+  },
+  "search": {
+    "placeholder": "Search...",
+    "clear": "Clear search"
+  },
+  "system": {
+    "loading": "Loading...",
+    "notDetected": "Not detected",
+    "notObtained": "N/A",
+    "statCpuCores": "CPU Cores",
+    "statTotalMemory": "Total Memory",
+    "statInstalledLanguages": "Languages Installed",
+    "statInstalledTools": "Tools Installed",
+    "cardOs": "Operating System",
+    "cardCpu": "Processor",
+    "cardMemory": "Memory",
+    "cardHostname": "Hostname",
+    "cardNetwork": "Network",
+    "rowName": "Name",
+    "rowVersion": "Version",
+    "rowKernel": "Kernel",
+    "rowCores": "Cores",
+    "rowHostname": "Hostname",
+    "rowTotalMemory": "Total Memory",
+    "rowLocalIp": "Local IP",
+    "rowInterfaces": "Interfaces",
+    "cores_one": "{{count}} core",
+    "cores_other": "{{count}} cores"
+  },
+  "cards": {
+    "version": "Version",
+    "path": "Path",
+    "status": "Status",
+    "notInstalled": "Not installed",
+    "install": "Install",
+    "uninstall": "Uninstall"
+  },
+  "empty": {
+    "detectionDisabled": "Detection is disabled",
+    "detectionDisabledHint": "You can enable it in Settings",
+    "searchNoResults": "No results for \"{{query}}\"",
+    "nothingDetectedLanguages": "No programming languages detected",
+    "nothingDetectedTools": "No development tools detected",
+    "nothingDetected": "No data detected"
+  },
+  "status": {
+    "installed": "Installed",
+    "notInstalled": "Not installed"
+  },
+  "modal": {
+    "noGuide": "No installation guide available",
+    "officialPage": "📥 Official Download Page",
+    "installCmd": "⚡ Install Command",
+    "windows": "🪟 Windows",
+    "macos": "🍎 macOS",
+    "linux": "🐧 Linux",
+    "notes": "💡 Notes",
+    "noUninstallGuide": "No detailed uninstall instructions available. Please refer to the official docs or use the system uninstaller.",
+    "installTitle": "Install {{name}}",
+    "uninstallTitle": "Uninstall {{name}}",
+    "close": "Close"
+  },
+  "common": {
+    "close": "Close",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "import": "Import",
+    "unknown": "Unknown",
+    "retry": "Retry"
+  },
+  "settings": {
+    "tabGeneral": "General",
+    "tabData": "Data",
+    "tabAbout": "About",
+    "appearance": "Appearance",
+    "theme": "Theme",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeSystem": "System",
+    "language": "Language",
+    "langZh": "简体中文",
+    "langEn": "English",
+    "compactMode": "Compact mode",
+    "compactModeDesc": "Reduce spacing to show more content",
+    "startup": "Startup",
+    "autoCheckUpdate": "Check for updates on startup",
+    "autoCheckUpdateDesc": "Automatically check for new versions when the app starts",
+    "autoRefreshOnStart": "Refresh detection on startup",
+    "autoRefreshOnStartDesc": "Re-scan your environment when the app starts",
+    "detectScope": "Detection Scope",
+    "detectLanguages": "Detect programming languages",
+    "detectLanguagesDesc": "Detect Node.js, Python, Go, etc.",
+    "detectTools": "Detect development tools",
+    "detectToolsDesc": "Detect Git, Docker, VS Code, etc.",
+    "detectNetwork": "Detect network info",
+    "detectNetworkDesc": "Get local IP and network interfaces",
+    "cacheMgmt": "Cache Management",
+    "dbPath": "Database location",
+    "dbSize": "Database size",
+    "cacheExpiry": "Cache validity",
+    "cacheExpiry1h": "1 hour",
+    "cacheExpiry6h": "6 hours",
+    "cacheExpiry12h": "12 hours",
+    "cacheExpiry24h": "24 hours",
+    "cacheExpiry3d": "3 days",
+    "cacheExpiry7d": "7 days",
+    "cacheExpiryNever": "Never expire",
+    "clearCache": "Clear cache",
+    "clearCacheConfirm": "Clear the detection cache?",
+    "export": "Export",
+    "exportFormat": "Export format",
+    "exportJson": "JSON",
+    "exportCsv": "CSV",
+    "includePath": "Include install paths",
+    "includePathDesc": "Include tool install paths in the export",
+    "includeInstallGuide": "Include install guides",
+    "includeInstallGuideDesc": "Include install/uninstall guides in the export",
+    "exportConfig": "Export",
+    "exportSuccess": "Report exported successfully",
+    "import": "Import",
+    "importDesc": "Import a previously exported config file",
+    "importBtn": "Import from file",
+    "importModalTitle": "Import Config",
+    "importPlaceholder": "Paste JSON config data...",
+    "importFailed": "Import failed: invalid JSON data",
+    "importSuccess": "Import succeeded",
+    "version": "Version",
+    "checkUpdate": "Check for updates",
+    "checking": "Checking...",
+    "installUpdate": "Install update",
+    "upToDate": "You are up to date",
+    "updateFailed": "Failed to check for updates",
+    "updateAvailable": "A new version is available"
+  },
+  "links": {
+    "quickLinks": "Quick Links",
+    "githubRepo": "GitHub Repository",
+    "downloadPage": "Download Page",
+    "reportIssue": "Report Issue"
+  },
+  "tech": {
+    "techStack": "Tech Stack"
+  },
+  "update": {
+    "available": "New version available: {{version}}",
+    "checkFailed": "Failed to check for updates"
+  }
+}
