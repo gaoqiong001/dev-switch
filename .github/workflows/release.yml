@@ -154,6 +154,16 @@ jobs:
       - name: List assets
         run: ls -la release-assets
 
+      # 如果 Release 已存在（如 tauri-action 之前创建的），先删除
+      - name: Delete existing release
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete "${{ github.ref_name }}" --yes --repo "$GITHUB_REPOSITORY" || true
+          # 同时删除远端 tag（softprops 会重新创建）
+          git push origin --delete "${{ github.ref_name }}" 2>/dev/null || true
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
