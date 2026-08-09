@@ -87,41 +87,43 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          npm run tauri build -- --bundles msi
+          npm run tauri build -- --bundles msi,nsis
 
           # 收集资产
           New-Item -ItemType Directory -Force -Path release-assets | Out-Null
           $VERSION = "${{ github.ref_name }}"
           $targetRoot = 'src-tauri/target/release'
 
-          # .msi 安装包
+          # .msi 安装包 + .sig
           $msi = Get-ChildItem -Path "$targetRoot/bundle/msi" -Recurse -Include *.msi -ErrorAction SilentlyContinue | Select-Object -First 1
-          if ($null -eq $msi) {
-            $msi = Get-ChildItem -Path "$targetRoot/bundle" -Recurse -Include *.msi -ErrorAction SilentlyContinue | Select-Object -First 1
-          }
           if ($null -ne $msi) {
             $dest = "Dev.Switch_${VERSION}_x64.msi"
             Copy-Item $msi.FullName (Join-Path "release-assets" $dest)
             Write-Host "✅ MSI copied: $dest"
-
-            # .sig 签名文件（updater 必需）
             $sigPath = "$($msi.FullName).sig"
             if (Test-Path $sigPath) {
               Copy-Item $sigPath (Join-Path "release-assets" "$dest.sig")
-              Write-Host "✅ Signature copied: $dest.sig"
+              Write-Host "✅ MSI signature copied: $dest.sig"
             } else {
-              Write-Warning "⚠️ No .sig found for MSI — updater will not work"
+              Write-Warning "⚠️ No .sig found for MSI"
             }
           } else {
-            throw "❌ No MSI installer found"
+            Write-Warning "⚠️ No MSI installer found"
           }
 
-          # .exe 安装包
+          # .exe NSIS 安装包 + .sig
           $nsis = Get-ChildItem -Path "$targetRoot/bundle/nsis" -Recurse -Include *.exe -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($null -ne $nsis) {
             $dest = "Dev.Switch_${VERSION}_x64-setup.exe"
             Copy-Item $nsis.FullName (Join-Path "release-assets" $dest)
             Write-Host "✅ NSIS copied: $dest"
+            $sigPath = "$($nsis.FullName).sig"
+            if (Test-Path $sigPath) {
+              Copy-Item $sigPath (Join-Path "release-assets" "$dest.sig")
+              Write-Host "✅ NSIS signature copied: $dest.sig"
+            }
+          } else {
+            Write-Warning "⚠️ No NSIS installer found"
           }
 
           # 列出所有资产
@@ -174,17 +176,84 @@ jobs:
           body: |
             # Dev Switch ${{ github.ref_name }}
 
-            > 一键检测本地开发环境：19 种编程语言、50+ 种开发工具、系统与网络信息，附带各系统的安装/卸载指引，结果缓存在 SQLite 中，后续启动即时返回。
-            >
-            > Detect your local dev environment in one click: 19 languages, 50+ tools, system & network info, per-OS install guides — cached in SQLite for instant launches.
+            > The first public release of **Dev Switch** — a Tauri-based desktop app that detects and displays your local development environment in one click: system info, 19 programming languages, 50+ development tools and network details, with per-OS install/uninstall guides, all cached in SQLite for instant subsequent launches. Available on Windows (macOS/Linux installers planned).
 
-            ## 📝 Release Notes
+            **[中文版 →](https://github.com/gaoqiong001/dev-switch/blob/${{ github.ref_name }}/docs/release-notes/${{ github.ref_name }}-zh.md)** | **[Changelog](https://github.com/gaoqiong001/dev-switch/blob/${{ github.ref_name }}/CHANGELOG.md)**
 
-            **English**: [docs/release-notes/${{ github.ref_name }}-en.md](docs/release-notes/${{ github.ref_name }}-en.md)
+            ---
 
-            **中文**: [docs/release-notes/${{ github.ref_name }}-zh.md](docs/release-notes/${{ github.ref_name }}-zh.md)
+            ## Highlights: What You Can Do Now
 
-            **Changelog**: [CHANGELOG.md](CHANGELOG.md)
+            - **One-click full inventory**: detect 19 languages and 50+ tools in a single scan; installed items are sorted to the front.
+            - **Clean version output**: raw `--version` banners are cleaned to the version token (e.g. `curl 8.21.0 (Windows) …` → `8.21.0`).
+            - **Per-OS install/uninstall guides**: every item includes the exact install/uninstall command for Windows, macOS, or Linux.
+            - **System & network info**: OS, hostname, CPU, memory, plus local IP and network interfaces.
+            - **Silent auto-update**: built-in updater downloads and installs new versions automatically (toggleable in Settings); falls back to opening the download page when disabled.
+            - **Search, themes, export**: filter by name; light/dark/system themes; compact mode; export results as JSON/CSV.
+
+            ---
+
+            ## Overview
+
+            Dev Switch is a local development-environment detection app. It scans the machine for installed runtimes and tools, reports clean version numbers and install paths, and opens the matching install/uninstall guide per platform. Detection results are cached in a bundled SQLite database, so subsequent launches are instant until you hit **Refresh**.
+
+            **Release date**: 2026-08-10
+
+            **Change size**: 7 commits | 70 files changed | +13,417 / -17 lines
+
+            ---
+
+            ## Added
+
+            ### One-Click Environment Detection
+
+            A single scan detects 19 programming languages and 50+ development tools installed on your machine. System information (OS version, hostname, CPU cores, total memory) and network details (local IP, network interfaces) are included. Installed items are always sorted to the front for quick identification.
+
+            ### Clean Version Output
+
+            Raw `--version` output is cleaned to the version token only. Multi-line banners (VS Code), banner text (curl), and version prefixes (v22.12.0) are all handled. The version cleaning works across 19 languages and 50+ tools without external regex dependencies.
+
+            ### Per-OS Install and Uninstall Guides
+
+            Every detected item includes platform-specific install and uninstall commands. Windows users get `winget` or `choco` commands, macOS users get `brew` commands, and Linux users get `apt-get` commands. Each guide is tailored to the specific tool.
+
+            ### Silent Auto-Update
+
+            A built-in updater checks for new versions on startup (when enabled in **Settings → Startup → Check for updates on startup**) and downloads and installs them silently via the Tauri updater. The feature is toggleable — when disabled, checking for updates opens the GitHub Release page for manual download. Semantic version comparison ensures correct upgrade detection.
+
+            ### Search, Themes, and Export
+
+            Filter languages and tools by name with the search bar. Switch between light, dark, or system-following themes. Compact mode reduces spacing for denser layouts. Export detection results as JSON or CSV, and import settings from a previous export.
+
+            ### SQLite Cache
+
+            Detection results are cached in a bundled SQLite database. Subsequent launches load from cache instantly. Hit **Refresh** to clear the cache and re-scan. The cache expiry is configurable in Settings.
+
+            ---
+
+            ## Upgrade Notes
+
+            - **No upgrade path** — this is the first release; there is no previous version to upgrade from, and no database migration (schema is created fresh on first launch).
+            - Updates from this version onward are delivered via the built-in silent updater; new versions are downloaded and installed automatically (toggleable in **Settings → Startup → Auto-download and install updates**).
+
+            ---
+
+            ## Download & Install
+
+            Grab the installer for your system from the **Assets** section below.
+
+            Windows:
+
+            - `.exe` (NSIS installer)
+            - `.msi` (MSI installer) — recommended for auto-update support
+
+            > No console windows pop up during detection on Windows.
+
+            ---
+
+            ## License
+
+            MIT © Gao Qiong
           files: release-assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
