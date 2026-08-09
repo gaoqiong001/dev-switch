@@ -37,8 +37,11 @@ jobs:
       - name: Install frontend deps
         run: npm ci
 
-      # 参考 cc-switch：手动处理密钥格式（支持两行原文 / base64 包裹 / 单行 base64），
-      # 写入 GITHUB_ENV 供 tauri build 读取。
+      # 参考 cc-switch：处理密钥格式，写入文件供 Tauri CLI 读取。
+      # Tauri CLI 支持两种方式：
+      #   1. TAURI_PRIVATE_KEY = 密钥文件路径
+      #   2. TAURI_PRIVATE_KEY = 完整两行密钥内容
+      # 这里采用方式 1（写文件路径），最可靠。
       - name: Prepare signing key
         shell: bash
         run: |
@@ -50,36 +53,37 @@ jobs:
 
           KEY_PATH="$RUNNER_TEMP/tauri_signing.key"
 
-          # 情况 1：原始两行文本（以 "untrusted comment:" 开头）
+          # 情况 1：已是两行格式（以 "untrusted comment:" 开头）
           if echo "$RAW" | head -n1 | grep -q '^untrusted comment:'; then
             printf '%s\n' "$RAW" > "$KEY_PATH"
             echo "✅ Raw two-line key"
-          # 情况 2：base64 包裹（解码后是两行）
+          # 情况 2：base64 编码的两行文件（解码后以 "untrusted comment:" 开头）
           elif DECODED=$(printf '%s' "$RAW" | (base64 --decode 2>/dev/null || base64 -D 2>/dev/null)) \
                && echo "$DECODED" | head -n1 | grep -q '^untrusted comment:'; then
             printf '%s\n' "$DECODED" > "$KEY_PATH"
             echo "✅ Base64-wrapped key decoded"
-          # 情况 3：单行纯 base64 → 构造两行文件
+          # 情况 3：单行 base64（纯 Base64 字符串）→ 构造两行文件
           elif echo "$RAW" | grep -Eq '^[A-Za-z0-9+/=]+$'; then
             ONE=$(printf '%s' "$RAW" | tr -d '\r\n')
             printf '%s\n%s\n' "untrusted comment: tauri signing key" "$ONE" > "$KEY_PATH"
-            echo "✅ Single-line base64 key wrapped"
+            echo "✅ Single-line base64 wrapped to two-line file"
           else
             echo "❌ Unrecognized key format" >&2
+            echo "Key starts with: $(echo "$RAW" | head -c 20)..." >&2
             exit 1
           fi
 
-          # base64 编码后注入 GITHUB_ENV（多行安全）
-          if command -v base64 >/dev/null 2>&1; then
-            KEY_B64=$(base64 < "$KEY_PATH" | tr -d '\r\n')
-          else
-            KEY_B64=$(node -e "process.stdout.write(require('fs').readFileSync('$KEY_PATH').toString('base64'))")
-          fi
-          echo "TAURI_SIGNING_PRIVATE_KEY=$KEY_B64" >> "$GITHUB_ENV"
+          echo "Key file: $KEY_PATH"
+          head -1 "$KEY_PATH" | cut -c1-40
+          echo "..."
+          wc -l "$KEY_PATH"
+
+          # 注入文件路径（Tauri CLI 读 TAURI_PRIVATE_KEY 环境变量）
+          echo "TAURI_PRIVATE_KEY=$KEY_PATH" >> "$GITHUB_ENV"
           if [ -n "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" ]; then
-            echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" >> "$GITHUB_ENV"
+            echo "TAURI_KEY_PASSWORD=${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" >> "$GITHUB_ENV"
           fi
-          echo "✅ Signing key prepared"
+          echo "✅ Signing key prepared at $KEY_PATH"
 
       # 参考 cc-switch：直接调 tauri CLI 构建（不用 tauri-action），
       # 然后手动收集 .msi + .sig 到 release-assets/ 目录。
@@ -87,43 +91,48 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          npm run tauri build -- --bundles msi,nsis
+          npm run tauri build -- --bundles msi,nsis,updater
 
           # 收集资产
           New-Item -ItemType Directory -Force -Path release-assets | Out-Null
           $VERSION = "${{ github.ref_name }}"
           $targetRoot = 'src-tauri/target/release'
 
-          # .msi 安装包 + .sig
+          # .msi 安装包（供用户下载）
           $msi = Get-ChildItem -Path "$targetRoot/bundle/msi" -Recurse -Include *.msi -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($null -ne $msi) {
             $dest = "Dev.Switch_${VERSION}_x64.msi"
             Copy-Item $msi.FullName (Join-Path "release-assets" $dest)
             Write-Host "✅ MSI copied: $dest"
-            $sigPath = "$($msi.FullName).sig"
-            if (Test-Path $sigPath) {
-              Copy-Item $sigPath (Join-Path "release-assets" "$dest.sig")
-              Write-Host "✅ MSI signature copied: $dest.sig"
-            } else {
-              Write-Warning "⚠️ No .sig found for MSI"
-            }
           } else {
             Write-Warning "⚠️ No MSI installer found"
           }
 
-          # .exe NSIS 安装包 + .sig
+          # .exe NSIS 安装包（供用户下载）
           $nsis = Get-ChildItem -Path "$targetRoot/bundle/nsis" -Recurse -Include *.exe -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($null -ne $nsis) {
             $dest = "Dev.Switch_${VERSION}_x64-setup.exe"
             Copy-Item $nsis.FullName (Join-Path "release-assets" $dest)
             Write-Host "✅ NSIS copied: $dest"
-            $sigPath = "$($nsis.FullName).sig"
-            if (Test-Path $sigPath) {
-              Copy-Item $sigPath (Join-Path "release-assets" "$dest.sig")
-              Write-Host "✅ NSIS signature copied: $dest.sig"
-            }
           } else {
             Write-Warning "⚠️ No NSIS installer found"
+          }
+
+          # updater 产物：.msi.zip + .msi.zip.sig（供 updater 使用）
+          # Tauri v1 的 updater bundle 在 bundle/updater/ 下生成
+          $updaterDir = "$targetRoot/bundle/updater"
+          if (Test-Path $updaterDir) {
+            Get-ChildItem -Path $updaterDir -Recurse | ForEach-Object {
+              Copy-Item $_.FullName (Join-Path "release-assets" $_.Name)
+              Write-Host "✅ Updater artifact copied: $($_.Name)  ($($_.Length) bytes)"
+            }
+          } else {
+            Write-Warning "⚠️ No updater bundle directory found"
+            # 兜底：在 bundle/ 全局搜索 .sig 文件
+            Get-ChildItem -Path "$targetRoot/bundle" -Recurse -Include *.sig -ErrorAction SilentlyContinue | ForEach-Object {
+              Copy-Item $_.FullName (Join-Path "release-assets" $_.Name)
+              Write-Host "✅ Signature found elsewhere: $($_.Name)"
+            }
           }
 
           # 列出所有资产
