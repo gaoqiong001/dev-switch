@@ -66,5 +66,7 @@ jobs:
             **Changelog**: [CHANGELOG.md](CHANGELOG.md)
           releaseDraft: false
           prerelease: false
+          # 上传 latest.json + .sig 到 Release Assets，供应用内 updater 使用
+          includeUpdaterJson: true
           # nsis + msi；v1 updater 在 Windows 认 .msi.zip，latest.json 的 windows-x86_64 默认指向它
           args: --bundles nsis,msi
