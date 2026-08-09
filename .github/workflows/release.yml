@@ -51,9 +51,19 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'Dev Switch ${{ github.ref_name }}'
           releaseBody: |
-            Auto-generated release for ${{ github.ref_name }}.
+            # Dev Switch ${{ github.ref_name }}
 
-            See the assets below to download and install.
+            > 一键检测本地开发环境：19 种编程语言、50+ 种开发工具、系统与网络信息，附带各系统的安装/卸载指引，结果缓存在 SQLite 中，后续启动即时返回。
+            >
+            > Detect your local dev environment in one click: 19 languages, 50+ tools, system & network info, per-OS install guides — cached in SQLite for instant launches.
+
+            ## 📝 Release Notes
+
+            **English**: [docs/release-notes/${{ github.ref_name }}-en.md](docs/release-notes/${{ github.ref_name }}-en.md)
+
+            **中文**: [docs/release-notes/${{ github.ref_name }}-zh.md](docs/release-notes/${{ github.ref_name }}-zh.md)
+
+            **Changelog**: [CHANGELOG.md](CHANGELOG.md)
           releaseDraft: false
           prerelease: false
           # nsis + msi；v1 updater 在 Windows 认 .msi.zip，latest.json 的 windows-x86_64 默认指向它

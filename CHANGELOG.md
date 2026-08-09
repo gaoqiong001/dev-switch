@@ -11,7 +11,7 @@ Release notes: [English](docs/release-notes/v0.1.0-en.md) | [中文](docs/releas
 
 The first release of **Dev Switch** — a Tauri-based desktop app that detects and displays your local development environment in one click. It scans the machine for 19 programming languages and 50+ development tools, reports clean version numbers and install paths, and gives you the exact install/uninstall command for each one on your OS. System and network info are included too, and results are cached in SQLite so subsequent launches are instant until you hit **Refresh**.
 
-**Stats**: 5 commits | 64 files changed | +12,674 insertions | -17 deletions
+**Stats**: 7 commits | 70 files changed | +13,417 insertions | -17 deletions
 
 ### Added
 
@@ -24,8 +24,9 @@ The first release of **Dev Switch** — a Tauri-based desktop app that detects a
 - **i18n** — Simplified Chinese / English UI
 - **Themes** — light, dark or system
 - **Export / Import** — detection results as JSON/CSV; settings import
-- **Update check** — queries the GitHub Releases API for new versions
+- **Silent auto-update** — built-in updater delivers new versions automatically; toggleable in **Settings → Startup → Auto-download and install updates**; falls back to opening the GitHub Release page when disabled
 - **Quiet detection on Windows** — commands spawn with `CREATE_NO_WINDOW`, so no console windows flash
+- **CI/Release** — GitHub Actions automated pipeline: `ci.yml` (quality gate on push/PR), `release.yml` (build + publish on `v*` tag)
 
 ### Upgrade notes
 

@@ -1130,6 +1130,34 @@ fn open_url(url: String) -> Result<(), String> {
     open::that(&url).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn set_window_theme(window: tauri::Window, theme: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::Foundation::{HWND, BOOL};
+        use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_USE_IMMERSIVE_DARK_MODE};
+
+        let hwnd = window.hwnd().map_err(|e| e.to_string())?;
+        let is_dark = theme == "dark";
+        let value = BOOL::from(is_dark);
+        unsafe {
+            DwmSetWindowAttribute(
+                HWND(hwnd.0 as _),
+                DWMWA_USE_IMMERSIVE_DARK_MODE,
+                &value as *const _ as *const _,
+                std::mem::size_of::<BOOL>() as u32,
+            )
+            .map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = theme;
+        Ok(())
+    }
+}
+
 fn main() {
     // 初始化数据库
     let db_path = dirs::data_local_dir()
@@ -1158,7 +1186,8 @@ fn main() {
             get_db_size,
             check_for_updates,
             install_update_and_restart,
-            open_url
+            open_url,
+            set_window_theme
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

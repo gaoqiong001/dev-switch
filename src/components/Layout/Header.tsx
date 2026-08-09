@@ -34,8 +34,22 @@ export default function Header({
       <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6">
         {/* 左侧 logo */}
         <div className="flex items-center gap-3 flex-shrink-0">
-          <div className="w-9 h-9 bg-gradient-to-br from-[var(--primary)] to-[var(--primary-dark)] rounded-xl flex items-center justify-center flex-shrink-0">
-            <span className="text-lg">🔍</span>
+          <div className="w-9 h-9 flex-shrink-0">
+            <svg viewBox="0 0 512 512" className="w-full h-full">
+              <defs>
+                <linearGradient id="logo-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="var(--primary)" />
+                  <stop offset="100%" stopColor="var(--primary-dark)" />
+                </linearGradient>
+              </defs>
+              <rect width="512" height="512" rx="96" fill="url(#logo-bg)" />
+              <rect x="112" y="120" width="288" height="200" rx="16" fill="none" stroke="white" strokeWidth="14" />
+              <rect x="216" y="320" width="80" height="20" rx="4" fill="white" opacity="0.8" />
+              <rect x="184" y="336" width="144" height="12" rx="6" fill="white" opacity="0.6" />
+              <text x="256" y="260" textAnchor="middle" fontFamily="monospace" fontWeight="bold" fontSize="100" fill="white" opacity="0.95">&lt; /&gt;</text>
+              <circle cx="370" cy="150" r="18" fill="#22c55e" />
+              <circle cx="370" cy="150" r="8" fill="white" />
+            </svg>
           </div>
           <div className="hidden md:block">
             <div className="text-base font-bold text-[var(--fg)] leading-tight">{t('app.name')}</div>

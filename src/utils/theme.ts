@@ -1,19 +1,30 @@
 import { useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/tauri';
 
 export type Theme = 'light' | 'dark' | 'system';
 
 const SETTINGS_KEY = 'dev-switch-settings';
+
+/** 同步原生窗口主题（标题栏颜色） */
+function syncNativeTheme(resolved: 'light' | 'dark'): void {
+  invoke('set_window_theme', { theme: resolved }).catch(() => {
+    // 非关键错误，静默忽略
+  });
+}
 
 /** 应用主题：light/dark 直接切换 .dark 类；system 跟随系统偏好。 */
 export function applyTheme(theme: Theme): void {
   const root = document.documentElement;
   if (theme === 'dark') {
     root.classList.add('dark');
+    syncNativeTheme('dark');
   } else if (theme === 'light') {
     root.classList.remove('dark');
+    syncNativeTheme('light');
   } else {
     const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     root.classList.toggle('dark', isDark);
+    syncNativeTheme(isDark ? 'dark' : 'light');
   }
 }
 
