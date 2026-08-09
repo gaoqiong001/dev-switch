@@ -413,21 +413,21 @@ export default function SettingsPage({
               {/* 右：快捷链接 + 检查更新 */}
               <div className="flex flex-wrap items-center gap-2">
                 <button
-                  onClick={() => openUrl('https://github.com/farion1231/dev-switch')}
+                  onClick={() => openUrl('https://github.com/gaoqiong001/dev-switch')}
                   className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-[var(--fg)] bg-[var(--muted)] hover:bg-[var(--accent)] rounded-lg transition-colors"
                 >
                   <span className="text-sm">🐙</span>
                   {t('links.githubRepo')}
                 </button>
                 <button
-                  onClick={() => openUrl('https://github.com/farion1231/dev-switch/releases')}
+                  onClick={() => openUrl('https://github.com/gaoqiong001/dev-switch/releases')}
                   className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-[var(--fg)] bg-[var(--muted)] hover:bg-[var(--accent)] rounded-lg transition-colors"
                 >
                   <span className="text-sm">📦</span>
                   {t('links.downloadPage')}
                 </button>
                 <button
-                  onClick={() => openUrl('https://github.com/farion1231/dev-switch/issues')}
+                  onClick={() => openUrl('https://github.com/gaoqiong001/dev-switch/issues')}
                   className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-[var(--fg)] bg-[var(--muted)] hover:bg-[var(--accent)] rounded-lg transition-colors"
                 >
                   <span className="text-sm">🐛</span>

@@ -941,7 +941,7 @@ async fn check_for_updates() -> Result<serde_json::Value, String> {
     // 检查 GitHub releases
     let client = reqwest::Client::new();
     let response = client
-        .get("https://api.github.com/repos/farion1231/dev-switch/releases/latest")
+        .get("https://api.github.com/repos/gaoqiong001/dev-switch/releases/latest")
         .header("User-Agent", "dev-switch")
         .send()
         .await
@@ -969,7 +969,7 @@ async fn check_for_updates() -> Result<serde_json::Value, String> {
 
     let download_url = release["html_url"]
         .as_str()
-        .unwrap_or("https://github.com/farion1231/dev-switch/releases")
+        .unwrap_or("https://github.com/gaoqiong001/dev-switch/releases")
         .to_string();
 
     let notes = release["body"]
