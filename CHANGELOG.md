@@ -5,7 +5,27 @@ All notable changes to Dev Switch will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Release notes: [English](docs/release-notes/v0.1.0-en.md) | [中文](docs/release-notes/v0.1.0-zh.md)
+Release notes: [English](docs/release-notes/v0.2.0-en.md) | [中文](docs/release-notes/v0.2.0-zh.md)
+
+## [0.2.0] - 2026-08-10
+
+The **Tauri v2** upgrade. The backend was migrated from Tauri v1.8.3 to Tauri v2.8.0 (the same foundation as the reference app cc-switch), the config was rewritten to the v2 schema with a new `capabilities/` permission file, and the frontend moved to `@tauri-apps/api` / `@tauri-apps/cli` 2.x.
+
+**This release makes the silent auto-update genuinely work end-to-end.** Tauri v2 signs the `.msi` directly (producing `.msi.sig`), and the release pipeline now emits `.msi` + `.msi.sig` + `-setup.exe` + a `latest.json` with a real signature/URL — so the in-app "check for updates / auto-install" flow finally validates and installs real releases.
+
+**Stats**: Tauri v1 → v2 upgrade · 13 files changed | +2,019 / −1,389 lines
+
+### Changed
+
+- **Upgraded to Tauri v2** — backend from v1.8.3 → v2.8.0; `tauri.conf.json` rewritten to the v2 schema (`app` / `bundle.createUpdaterArtifacts` / `plugins.updater`); added `src-tauri/capabilities/default.json` for IPC permissions
+- **Updater pipeline fixed** — v2 signs the `.msi` directly (`.msi.sig`), `createUpdaterArtifacts` auto-generates signatures in CI, and `latest.json` points at the signed `.msi`
+- **Frontend deps** — `@tauri-apps/api` / `@tauri-apps/cli` → 2.x; `invoke` import moved to `@tauri-apps/api/core`
+- **Download progress fixed** — the `tauri://update-download-progress` payload now reports cumulative `downloaded` bytes instead of per-chunk increments
+
+### Upgrade notes
+
+- No database migration; the schema is unchanged from v0.1.0.
+- v0.1.0 installs upgrade automatically via the built-in updater (toggleable in **Settings → Startup → Auto-download and install updates**).
 
 ## [0.1.0] - 2026-08-10
 

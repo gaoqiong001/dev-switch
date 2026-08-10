@@ -37,97 +37,87 @@ jobs:
       - name: Install frontend deps
         run: npm ci
 
-      # 处理密钥格式，写入文件供 Tauri CLI 读取。
-      # Tauri CLI 的 TAURI_PRIVATE_KEY 支持：
-      #   1. 文件路径（绝对路径）
-      #   2. 密钥内容（两行文本）
-      # 这里写文件后，通过 TAURI_PRIVATE_KEY=文件路径 传递。
-      # 注意：密码必须在 GitHub Secrets 中设置 TAURI_SIGNING_PRIVATE_KEY_PASSWORD。
+      # 规范化签名密钥（Tauri v2）：把 secret 归一为两行 .key 文件 → base64 整文件 → TAURI_SIGNING_PRIVATE_KEY。
+      # v2 CLI 读 TAURI_SIGNING_PRIVATE_KEY + TAURI_SIGNING_PRIVATE_KEY_PASSWORD（GitHub secrets 现名）。
+      # 注意：本密钥有密码保护，密码 secret 缺失则直接失败（否则 tauri 报 "Wrong password"）。
       - name: Prepare signing key
         shell: bash
         run: |
           RAW="${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}"
           if [ -z "$RAW" ]; then
-            echo "❌ TAURI_SIGNING_PRIVATE_KEY is empty" >&2
+            echo "❌ TAURI_SIGNING_PRIVATE_KEY 为空：请先在 GitHub Secrets 设置私钥（.key 文件内容）" >&2
             exit 1
           fi
 
           KEY_PATH="$RUNNER_TEMP/tauri_signing.key"
-
-          # 统一转为两行文件格式
+          # 统一归一为两行文件格式
           if echo "$RAW" | head -n1 | grep -q '^untrusted comment:'; then
             printf '%s\n' "$RAW" > "$KEY_PATH"
-            echo "✅ Raw two-line key"
+            echo "✅ 原始两行密钥文件"
           elif DECODED=$(printf '%s' "$RAW" | (base64 --decode 2>/dev/null || base64 -D 2>/dev/null)) \
                && echo "$DECODED" | head -n1 | grep -q '^untrusted comment:'; then
             printf '%s\n' "$DECODED" > "$KEY_PATH"
-            echo "✅ Base64-wrapped key decoded"
+            echo "✅ base64 包裹密钥已解码为两行"
           elif echo "$RAW" | grep -Eq '^[A-Za-z0-9+/=]+$'; then
             ONE=$(printf '%s' "$RAW" | tr -d '\r\n')
             printf '%s\n%s\n' "untrusted comment: tauri signing key" "$ONE" > "$KEY_PATH"
-            echo "✅ Single-line base64 wrapped to two-line file"
+            echo "✅ 单行 base64 已构造为两行"
           else
-            echo "❌ Unrecognized key format" >&2
+            echo "❌ 密钥格式无法识别" >&2
             exit 1
           fi
 
-          echo "Key lines: $(wc -l < "$KEY_PATH")"
-          echo "First line: $(head -1 "$KEY_PATH" | cut -c1-40)..."
+          KEY_B64=$(base64 < "$KEY_PATH" | tr -d '\r\n')
+          if [ -z "$KEY_B64" ]; then
+            echo "❌ 无法生成密钥 base64 内容" >&2
+            exit 1
+          fi
+          echo "TAURI_SIGNING_PRIVATE_KEY=$KEY_B64" >> "$GITHUB_ENV"
 
-          # 注入文件路径 + 密码
-          # Tauri v1 读 TAURI_PRIVATE_KEY（文件路径或内容）+ TAURI_KEY_PASSWORD（密码）
-          echo "TAURI_PRIVATE_KEY=$KEY_PATH" >> "$GITHUB_ENV"
-          echo "TAURI_KEY_PASSWORD=${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" >> "$GITHUB_ENV"
-          echo "✅ Signing key prepared at $KEY_PATH"
+          PWD="${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}"
+          if [ -z "$PWD" ]; then
+            echo "❌ TAURI_SIGNING_PRIVATE_KEY_PASSWORD 为空：签名密钥有密码，必须设置" >&2
+            exit 1
+          fi
+          echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$PWD" >> "$GITHUB_ENV"
+          echo "✅ Signing key prepared"
 
       # 参考 cc-switch：直接调 tauri CLI 构建（不用 tauri-action），
-      # 然后手动收集 .msi + .sig 到 release-assets/ 目录。
+      # 然后手动收集 .msi + .msi.sig + .exe 到 release-assets/ 目录。
+      # Tauri v2 直接签名 .msi（产出 .msi.sig），latest.json 指向 .msi。
       - name: Build Tauri app
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          npm run tauri build -- --bundles msi,nsis,updater
+          npm run tauri build
 
           # 收集资产
           New-Item -ItemType Directory -Force -Path release-assets | Out-Null
           $VERSION = "${{ github.ref_name }}"
           $targetRoot = 'src-tauri/target/release'
+          $base = "Dev-Switch-$VERSION-Windows-x86_64"
 
-          # .msi 安装包（供用户下载）
+          # ① MSI 安装包 + .msi.sig（updater 使用签名后的 .msi）
           $msi = Get-ChildItem -Path "$targetRoot/bundle/msi" -Recurse -Include *.msi -ErrorAction SilentlyContinue | Select-Object -First 1
-          if ($null -ne $msi) {
-            $dest = "Dev.Switch_${VERSION}_x64.msi"
-            Copy-Item $msi.FullName (Join-Path "release-assets" $dest)
-            Write-Host "✅ MSI copied: $dest"
+          if ($null -eq $msi) { Write-Error "No MSI installer found"; exit 1 }
+          Copy-Item $msi.FullName "release-assets/$base.msi"
+          Write-Host "✅ $base.msi"
+
+          $sigPath = "$($msi.FullName).sig"
+          if (Test-Path $sigPath) {
+            Copy-Item $sigPath "release-assets/$base.msi.sig"
+            Write-Host "✅ $base.msi.sig ($((Get-Item $sigPath).Length) bytes)"
           } else {
-            Write-Warning "⚠️ No MSI installer found"
+            Write-Error ".msi.sig not generated — signing failed"; exit 1
           }
 
-          # .exe NSIS 安装包（供用户下载）
+          # ② NSIS exe（供用户手动下载，不参与 updater）
           $nsis = Get-ChildItem -Path "$targetRoot/bundle/nsis" -Recurse -Include *.exe -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($null -ne $nsis) {
-            $dest = "Dev.Switch_${VERSION}_x64-setup.exe"
-            Copy-Item $nsis.FullName (Join-Path "release-assets" $dest)
-            Write-Host "✅ NSIS copied: $dest"
+            Copy-Item $nsis.FullName "release-assets/Dev-Switch-$VERSION-Windows-x86_64-setup.exe"
+            Write-Host "✅ setup.exe"
           } else {
             Write-Warning "⚠️ No NSIS installer found"
-          }
-
-          # updater 产物：.msi.zip + .msi.zip.sig（供 updater 使用）
-          # Tauri v1 的 updater bundle 在 bundle/updater/ 下生成
-          $updaterDir = "$targetRoot/bundle/updater"
-          if (Test-Path $updaterDir) {
-            Get-ChildItem -Path $updaterDir -Recurse | ForEach-Object {
-              Copy-Item $_.FullName (Join-Path "release-assets" $_.Name)
-              Write-Host "✅ Updater artifact copied: $($_.Name)  ($($_.Length) bytes)"
-            }
-          } else {
-            Write-Warning "⚠️ No updater bundle directory found"
-            # 兜底：在 bundle/ 全局搜索 .sig 文件
-            Get-ChildItem -Path "$targetRoot/bundle" -Recurse -Include *.sig -ErrorAction SilentlyContinue | ForEach-Object {
-              Copy-Item $_.FullName (Join-Path "release-assets" $_.Name)
-              Write-Host "✅ Signature found elsewhere: $($_.Name)"
-            }
           }
 
           # 列出所有资产
@@ -180,20 +170,18 @@ jobs:
           body: |
             # Dev Switch ${{ github.ref_name }}
 
-            > The first public release of **Dev Switch** — a Tauri-based desktop app that detects and displays your local development environment in one click: system info, 19 programming languages, 50+ development tools and network details, with per-OS install/uninstall guides, all cached in SQLite for instant subsequent launches. Available on Windows (macOS/Linux installers planned).
+            > **Tauri v2 升级版** — 迁移到 Tauri v2，并让「静默自动更新」真正端到端跑通：CI 直接签名 `.msi`（产出 `.msi.sig`），`latest.json` 指向签名后的 `.msi`，应用内「检查更新 / 自动安装」从此可验证并安装真实 Release。
 
             **[中文版 →](https://github.com/gaoqiong001/dev-switch/blob/${{ github.ref_name }}/docs/release-notes/${{ github.ref_name }}-zh.md)** | **[Changelog](https://github.com/gaoqiong001/dev-switch/blob/${{ github.ref_name }}/CHANGELOG.md)**
 
             ---
 
-            ## Highlights: What You Can Do Now
+            ## What's New in v0.2.0
 
-            - **One-click full inventory**: detect 19 languages and 50+ tools in a single scan; installed items are sorted to the front.
-            - **Clean version output**: raw `--version` banners are cleaned to the version token (e.g. `curl 8.21.0 (Windows) …` → `8.21.0`).
-            - **Per-OS install/uninstall guides**: every item includes the exact install/uninstall command for Windows, macOS, or Linux.
-            - **System & network info**: OS, hostname, CPU, memory, plus local IP and network interfaces.
-            - **Silent auto-update**: built-in updater downloads and installs new versions automatically (toggleable in Settings); falls back to opening the download page when disabled.
-            - **Search, themes, export**: filter by name; light/dark/system themes; compact mode; export results as JSON/CSV.
+            - **Migrated to Tauri v2** — backend upgraded from Tauri v1.8.3 to v2.8.0 (same foundation as the reference app cc-switch); config rewritten to the v2 schema; added `capabilities/` for IPC permissions.
+            - **Auto-update now actually works** — v2 signs the `.msi` directly (`.msi.sig`); release assets are now `.msi` + `.msi.sig` + `-setup.exe` + a `latest.json` with a real signature/URL.
+            - **Frontend deps upgraded** — `@tauri-apps/api` / `@tauri-apps/cli` to 2.x; `invoke` moved to `@tauri-apps/api/core`.
+            - **Fixed download progress** — progress events now report cumulative bytes, so the progress bar no longer jumps around.
 
             ---
 
@@ -203,48 +191,18 @@ jobs:
 
             **Release date**: 2026-08-10
 
-            **Change size**: 7 commits | 70 files changed | +13,417 / -17 lines
-
-            ---
-
-            ## Added
-
-            ### One-Click Environment Detection
-
-            A single scan detects 19 programming languages and 50+ development tools installed on your machine. System information (OS version, hostname, CPU cores, total memory) and network details (local IP, network interfaces) are included. Installed items are always sorted to the front for quick identification.
-
-            ### Clean Version Output
-
-            Raw `--version` output is cleaned to the version token only. Multi-line banners (VS Code), banner text (curl), and version prefixes (v22.12.0) are all handled. The version cleaning works across 19 languages and 50+ tools without external regex dependencies.
-
-            ### Per-OS Install and Uninstall Guides
-
-            Every detected item includes platform-specific install and uninstall commands. Windows users get `winget` or `choco` commands, macOS users get `brew` commands, and Linux users get `apt-get` commands. Each guide is tailored to the specific tool.
-
-            ### Silent Auto-Update
-
-            A built-in updater checks for new versions on startup (when enabled in **Settings → Startup → Check for updates on startup**) and downloads and installs them silently via the Tauri updater. The feature is toggleable — when disabled, checking for updates opens the GitHub Release page for manual download. Semantic version comparison ensures correct upgrade detection.
-
-            ### Search, Themes, and Export
-
-            Filter languages and tools by name with the search bar. Switch between light, dark, or system-following themes. Compact mode reduces spacing for denser layouts. Export detection results as JSON or CSV, and import settings from a previous export.
-
-            ### SQLite Cache
-
-            Detection results are cached in a bundled SQLite database. Subsequent launches load from cache instantly. Hit **Refresh** to clear the cache and re-scan. The cache expiry is configurable in Settings.
+            **Change size**: Tauri v1 → v2 upgrade · 13 files · +2,019 / −1,389 lines
 
             ---
 
             ## Upgrade Notes
 
-            - **No upgrade path** — this is the first release; there is no previous version to upgrade from, and no database migration (schema is created fresh on first launch).
-            - Updates from this version onward are delivered via the built-in silent updater; new versions are downloaded and installed automatically (toggleable in **Settings → Startup → Auto-download and install updates**).
+            - **Already on v0.1.0?** The built-in updater detects v0.2.0 on next launch and auto-installs it (if **Settings → Startup → Auto-download and install updates** is enabled). No database migration — the schema is unchanged.
+            - **Fresh install** — grab the `.exe` or `.msi` from the **Assets** section below.
 
             ---
 
             ## Download & Install
-
-            Grab the installer for your system from the **Assets** section below.
 
             Windows:
 
@@ -305,7 +263,7 @@ jobs:
             url="$BASE_URL/$fname"
             sig_content=$(cat "$sig")
             case "$fname" in
-              *.msi)
+              *-Windows-x86_64.msi)
                 WIN_URL="$url"; WIN_SIG="$sig_content";;
             esac
           done

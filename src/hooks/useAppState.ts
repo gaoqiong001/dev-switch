@@ -1,5 +1,5 @@
 import { useReducer, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/tauri';
+import { invoke } from '@tauri-apps/api/core';
 import { AppState, TabType, Settings } from '../types';
 
 type Action =

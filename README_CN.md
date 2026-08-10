@@ -56,7 +56,7 @@
 - **导出 / 导入** - 将检测结果导出为 JSON 或 CSV；导入设置恢复配置
 - **检查更新** - 查询 GitHub Releases API 是否有新版本
 
-[完整更新日志](CHANGELOG.md) | [发布说明](docs/release-notes/v0.1.0-zh.md)
+[完整更新日志](CHANGELOG.md) | [发布说明](docs/release-notes/v0.2.0-zh.md)
 
 ## 支持的编程语言
 

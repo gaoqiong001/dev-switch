@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/tauri';
+import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
 export type UpdateCheckResult =
@@ -15,15 +15,15 @@ interface RawUpdateResult {
   message?: string;
 }
 
-/** tauri://update-download-progress 事件负载；chunkLength 为单次回调的增量，非累计 */
+/** tauri://update-download-progress 事件负载；downloaded 为累计下载字节数，非增量 */
 export interface UpdateDownloadProgress {
-  chunkLength: number;
-  contentLength: number | null;
+  downloaded: number;
+  total: number | null;
 }
 
 /**
  * 订阅下载进度事件，返回退订函数。
- * chunkLength 是每次回调的增量，前端需自行累加计算百分比。
+ * downloaded 已是累计值，直接用于计算百分比。
  */
 export function onDownloadProgress(
   handler: (p: UpdateDownloadProgress) => void

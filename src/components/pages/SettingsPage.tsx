@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/tauri';
+import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
 import { Settings, AppState, LanguageInfo, ToolInfo } from '../../types';
 import { validate } from '../../hooks/useSettings';
@@ -42,7 +42,7 @@ export default function SettingsPage({
   onReload,
 }: SettingsPageProps) {
   const { t } = useTranslation();
-  const [appVersion, setAppVersion] = useState('v0.1.0');
+  const [appVersion, setAppVersion] = useState('v0.2.0');
   const [dbPath, setDbPath] = useState(t('common.unknown'));
   const [dbSize, setDbSize] = useState(t('common.unknown'));
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
@@ -110,13 +110,11 @@ export default function SettingsPage({
   /** 静默下载并自动安装更新；进度通过 tauri://update-download-progress 事件驱动横幅文案 */
   const startAutoInstall = async () => {
     setUpdateStatus({ text: t('update.downloading'), color: '#3b82f6' });
-    let downloaded = 0;
     let unlisten: (() => void) | null = null;
     try {
-      unlisten = await onDownloadProgress(({ chunkLength, contentLength }) => {
-        downloaded += chunkLength;
+      unlisten = await onDownloadProgress(({ downloaded, total }) => {
         const percent =
-          contentLength != null ? Math.min(99, Math.round((downloaded / contentLength) * 100)) : null;
+          total != null ? Math.min(99, Math.round((downloaded / total) * 100)) : null;
         setUpdateStatus({
           text: percent != null ? t('update.downloadProgress', { percent }) : t('update.downloading'),
           color: '#3b82f6',

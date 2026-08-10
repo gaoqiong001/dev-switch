@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::process::Command;
 use sysinfo::System;
-use tauri::State;
+use tauri::{Emitter, State};
+use tauri_plugin_updater::UpdaterExt;
 
 use db::Database;
 
@@ -1029,29 +1030,24 @@ fn get_db_size() -> Result<u64, String> {
 /// 返回结构保持 `{available, version, current_version, download_url, notes, message?}` 不变。
 #[tauri::command]
 async fn check_for_updates(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
-    // skip_events()：避免 updater 自动发 tauri://update-available 事件并注册安装监听
-    match tauri::updater::builder(app.clone())
-        .skip_events()
-        .check()
-        .await
-    {
-        Ok(response) => {
-            let available = response.is_update_available();
-            let version = response.latest_version().to_string();
-            let current = response.current_version().to_string();
-            Ok(serde_json::json!({
-                "available": available,
-                "version": version,
-                "current_version": current,
-                "download_url": format!(
-                    "https://github.com/gaoqiong001/dev-switch/releases/tag/v{}",
-                    version
-                ),
-                "notes": response.body().cloned().unwrap_or_default(),
-            }))
-        }
-        // 服务端 204 表示已是最新
-        Err(tauri::updater::Error::UpToDate) => Ok(serde_json::json!({
+    // build() 失败（如配置缺 pubkey）→ 兜底 GitHub API
+    let updater = match app.updater_builder().build() {
+        Ok(u) => u,
+        Err(_) => return check_for_updates_github().await,
+    };
+    match updater.check().await {
+        // check() 返回 Option<Update>：Some = 有新版本；None = 已是最新
+        Ok(Some(update)) => Ok(serde_json::json!({
+            "available": true,
+            "version": update.version,
+            "current_version": env!("CARGO_PKG_VERSION"),
+            "download_url": format!(
+                "https://github.com/gaoqiong001/dev-switch/releases/tag/v{}",
+                update.version
+            ),
+            "notes": update.body.unwrap_or_default(),
+        })),
+        Ok(None) => Ok(serde_json::json!({
             "available": false,
             "current_version": env!("CARGO_PKG_VERSION"),
         })),
@@ -1103,26 +1099,46 @@ async fn check_for_updates_github() -> Result<serde_json::Value, String> {
     }))
 }
 
+/// tauri://update-download-progress 事件负载；downloaded 为累计下载字节数（非增量）。
+#[derive(serde::Serialize, Clone)]
+struct UpdateDownloadProgress {
+    downloaded: u64,
+    total: Option<u64>,
+}
+
 /// 静默下载并安装更新（发现新版 → 自动安装）。
 /// Windows 上安装期间 msiexec 会接管并关闭当前进程，因此这行 await 通常不会返回；
 /// macOS/Linux 安装完成后继续执行到 restart()。
 #[tauri::command]
 async fn install_update_and_restart(app: tauri::AppHandle) -> Result<(), String> {
-    let response = tauri::updater::builder(app.clone())
-        .skip_events()
-        .check()
-        .await
-        .map_err(|e| e.to_string())?;
-    if !response.is_update_available() {
+    let updater = app.updater_builder().build().map_err(|e| e.to_string())?;
+    let Some(update) = updater.check().await.map_err(|e| e.to_string())? else {
         return Err("没有可安装的更新".to_string());
-    }
-    // download_and_install 内部会发 tauri://update-status 与 tauri://update-download-progress 事件
-    response
-        .download_and_install()
+    };
+    // download() 进度回调：chunk_len 为增量，累计后以 downloaded 发射进度事件
+    let progress_handle = app.clone();
+    let mut downloaded: u64 = 0;
+    let bytes = update
+        .download(
+            move |chunk_len, content_len| {
+                downloaded = downloaded.saturating_add(chunk_len as u64);
+                let _ = progress_handle.emit(
+                    "tauri://update-download-progress",
+                    UpdateDownloadProgress {
+                        downloaded,
+                        total: content_len,
+                    },
+                );
+            },
+            || {},
+        )
         .await
-        .map_err(|e| e.to_string())?;
-    app.restart();
-    Ok(())
+        .map_err(|e| format!("下载更新失败: {e}"))?;
+    update
+        .install(bytes)
+        .map_err(|e| format!("安装更新失败: {e}"))?;
+    // restart() 发散（返回 `!`），成功后进程由新版本接管，函数不再返回
+    app.restart()
 }
 
 #[tauri::command]
@@ -1174,6 +1190,7 @@ fn main() {
         .expect("Failed to initialize database");
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(database)
         .invoke_handler(tauri::generate_handler![
             get_system_info,

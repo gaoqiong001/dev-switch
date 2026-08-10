@@ -39,6 +39,7 @@ Desktop.ini
 src-tauri/target/
 src-tauri/WixTools/
 src-tauri/Frameworks/
+src-tauri/gen/
 
 # Rust
 **/*.rs.bk
